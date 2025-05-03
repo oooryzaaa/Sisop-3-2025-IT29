@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <string.h>
 
@@ -20,7 +19,7 @@ Weapon weapons[MAX_WEAPONS] = {
 };
 
 void show_shop() {
-    printf("\n=== Weapon Shop ===\n");
+    printf("\n=== Azriel's Weapon Shop ===\n");
     for (int i = 0; i < MAX_WEAPONS; i++) {
         printf("%d. %s | Price: %d | Damage: %d | Passive: %s\n", i+1, weapons[i].name, weapons[i].price, weapons[i].damage, weapons[i].passive);
     }
@@ -34,4 +33,3 @@ Weapon get_weapon(int index) {
     }
     return weapons[index];
 }
-
