@@ -12,8 +12,7 @@ void error_msg(const char *msg) {
     printf("ERROR: %s\n", msg);
 }
 
-// Logging function
-void log_event(const char* source, const char* action, const char* info) {
+void write_log(const char* source, const char* action, const char* info) {
     FILE *log_fp = fopen("client.log", "a");
     if (!log_fp) return;
 
@@ -49,8 +48,7 @@ void decrypt_file() {
     printf("Masukkan nama file teks (contoh: input_1.txt): ");
     scanf(" %[^\n]", filename);
 
-    // Log decrypt event
-    log_event("Client", "DECRYPT", "Text data");
+    write_log("Client", "DECRYPT", "Text data");
 
     int sock = connect_to_server();
     if (sock < 0) {
@@ -79,8 +77,7 @@ void download_file() {
     printf("Masukkan nama file jpeg (contoh: 1744401234.jpeg): ");
     scanf(" %[^\n]", filename);
 
-    // Log download event
-    log_event("Client", "DOWNLOAD", filename);
+    write_log("Client", "DOWNLOAD", filename);
 
     int sock = connect_to_server();
     if (sock < 0) {
@@ -126,19 +123,23 @@ void download_file() {
 int main() {
     int pilih;
     do {
-        printf("\n=== Rootkids RPC Client ===\n");
-        printf("1. Decrypt file .txt\n");
-        printf("2. Download file .jpeg\n");
-        printf("3. Exit\n");
-        printf("Pilih: ");
+        printf("\n");
+        printf("==========================================\n");
+        printf("            RPC Client System           \n");
+        printf("==========================================\n");
+        printf(" 1. Masukkan File\n");
+        printf(" 2. Install File dalam Bentuk Foto\n");
+        printf(" 3. Exit\n");
+        printf("------------------------------------------\n");
+        printf(" Masukkan pilihan Anda [1-3]: ");
         scanf("%d", &pilih);
 
         switch (pilih) {
             case 1: decrypt_file(); break;
             case 2: download_file(); break;
             case 3:
-                log_event("Client", "EXIT", "Client requested to exit");
-                printf("Keluar...\n");
+                write_log("Client", "EXIT", "Client requested to exit");
+                printf(" Keluar dari Sistem ya\n");
                 break;
             default: printf("Pilihan tidak valid.\n");
         }
@@ -146,4 +147,3 @@ int main() {
 
     return 0;
 }
-
