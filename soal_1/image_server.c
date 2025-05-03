@@ -8,33 +8,13 @@
 #include <netinet/in.h>
 #include <sys/stat.h>
 #include <arpa/inet.h>
-#include <sys/types.h>
 
 #define PORT 8080
 #define BUFFER_SIZE 4096
 #define DATABASE_PATH "server/database/"
 #define LOG_FILE "server/server.log"
 
-
-void daemonize() {
-    pid_t pid = fork();
-    if (pid < 0) exit(EXIT_FAILURE);
-    if (pid > 0) exit(EXIT_SUCCESS); 
-
-    if (setsid() < 0) exit(EXIT_FAILURE);
-    pid = fork();
-    if (pid < 0) exit(EXIT_FAILURE);
-    if (pid > 0) exit(EXIT_SUCCESS);
-
-    umask(0);
-    chdir("/");
-
-    for (int x = sysconf(_SC_OPEN_MAX); x >= 0; x--) {
-        close(x);
-    }
-}
-
-void log_event(const char* source, const char* action, const char* info) {
+void write_log(const char* source, const char* action, const char* info) {
     FILE *log_fp = fopen(LOG_FILE, "a");
     if (!log_fp) return;
 
@@ -46,7 +26,6 @@ void log_event(const char* source, const char* action, const char* info) {
     fclose(log_fp);
 }
 
-
 void reverse(char *str) {
     int len = strlen(str);
     for (int i = 0; i < len / 2; ++i) {
@@ -56,7 +35,6 @@ void reverse(char *str) {
     }
 }
 
-
 int hex_to_bin(const char *hex, unsigned char *bin) {
     size_t len = strlen(hex);
     int count = 0;
@@ -65,7 +43,6 @@ int hex_to_bin(const char *hex, unsigned char *bin) {
     }
     return count;
 }
-
 
 char* process_and_save(const char *filename) {
     FILE *fp = fopen(filename, "r");
@@ -118,7 +95,7 @@ void handle_client(int client_fd) {
 
     if (strncmp(buffer, "DECRYPT_FILE:", 13) == 0) {
         const char *raw_filename = buffer + 13;
-        log_event("Client", "DECRYPT_FILE", raw_filename);
+        write_log("Client", "DECRYPT", raw_filename);
 
         char fullpath[256];
         snprintf(fullpath, sizeof(fullpath), "client/secrets/%s", raw_filename);
@@ -126,10 +103,10 @@ void handle_client(int client_fd) {
         char *result_path = process_and_save(fullpath);
         if (result_path) {
             char *fname = strrchr(result_path, '/') + 1;
-            log_event("Server", "SAVED", fname);
+            write_log("Server", "SAVE", fname);
             write(client_fd, fname, strlen(fname));
         } else {
-            log_event("Server", "SAVE_FAIL", fullpath);
+            write_log("Server", "SAVE_FAIL", fullpath);
             write(client_fd, "ERROR_SAVE", 10);
         }
     }
@@ -140,14 +117,14 @@ void handle_client(int client_fd) {
 
         FILE *fp = fopen(path, "rb");
         if (!fp) {
-            log_event("Server", "NOT_FOUND", filename);
+            write_log("Server", "NOT_FOUND", filename);
             write(client_fd, "ERROR: File not found", 22);
             close(client_fd);
             return;
         }
 
-        log_event("Client", "DOWNLOAD", filename);
-        log_event("Server", "UPLOAD", filename);
+        write_log("Client", "DOWNLOAD", filename);
+        write_log("Server", "UPLOAD", filename);
 
         while (!feof(fp)) {
             int n = fread(buffer, 1, BUFFER_SIZE, fp);
@@ -162,11 +139,7 @@ void handle_client(int client_fd) {
     close(client_fd);
 }
 
-int main(int argc, char *argv[]) {
-    if (!(argc > 1 && strcmp(argv[1], "--no-daemon") == 0)) {
-        daemonize();
-    }
-
+int main() {
     int server_fd, client_fd;
     struct sockaddr_in addr;
     socklen_t addrlen = sizeof(addr);
@@ -175,23 +148,36 @@ int main(int argc, char *argv[]) {
     mkdir(DATABASE_PATH, 0755);
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd == 0) exit(EXIT_FAILURE);
+    if (server_fd == 0) {
+        perror("Socket failed");
+        exit(EXIT_FAILURE);
+    }
 
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
     addr.sin_port = htons(PORT);
 
-    if (bind(server_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) exit(EXIT_FAILURE);
-    if (listen(server_fd, 5) < 0) exit(EXIT_FAILURE);
+    if (bind(server_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("Bind failed");
+        exit(EXIT_FAILURE);
+    }
 
-    log_event("Server", "START", "Menunggu koneksi...");
+    if (listen(server_fd, 5) < 0) {
+        perror("Listen failed");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Server berjalan di port %d...\n", PORT);
+    write_log("Server", "START", "Menunggu koneksi...");
 
     while (1) {
         client_fd = accept(server_fd, (struct sockaddr*)&addr, &addrlen);
-        if (client_fd < 0) continue;
+        if (client_fd < 0) {
+            perror("Accept failed");
+            continue;
+        }
         handle_client(client_fd);
     }
 
     return 0;
 }
-
