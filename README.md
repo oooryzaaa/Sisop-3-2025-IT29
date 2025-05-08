@@ -1524,3 +1524,4 @@ void pvp_duel(struct SystemData* system_data, struct Hunter* hunter) {
 fungsi ini digunakan untuk melakukan duel antar hunter, dimana hunter yang kalah akan dihapus dari system beserta dengan shared memorynya. Pertama akan ditampilkan list hunter lain untuk diajak duel, hunter akan memilih 1 lawan untuk melakukan duel. selanjutnya akan dibandingkan power kedua hunter yang dimana power dihasilkan dari penjumlahan antara ATK, HP, dan DEF. Hunter yang menang akan mendapatkan ATK, HP, dan DEF milik lawannya.
 
 ![image](https://github.com/user-attachments/assets/be17bca1-823b-4f35-be16-4741584b9c7c)
+![image](https://github.com/user-attachments/assets/ecb4de58-54e4-4f9f-94a0-2809a0bf6600)
