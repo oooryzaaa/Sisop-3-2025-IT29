@@ -11,8 +11,9 @@
 
 #define PORT 8080
 #define BUFFER_SIZE 4096
-#define DATABASE_PATH "server/database/"
-#define LOG_FILE "server/server.log"
+#define DATABASE_PATH "/mnt/c/Praktikum/Modul_3/server/database/"
+#define LOG_FILE "/mnt/c/Praktikum/Modul_3/server/server.log"
+#define CLIENT_SECRETS_PATH "/mnt/c/Praktikum/Modul_3/client/secrets/"
 
 void write_log(const char* source, const char* action, const char* info) {
     FILE *log_fp = fopen(LOG_FILE, "a");
@@ -139,7 +140,31 @@ void handle_client(int client_fd) {
     close(client_fd);
 }
 
+void daemonize() {
+    pid_t pid = fork();
+    if (pid < 0) {
+        exit(EXIT_FAILURE);
+    }
+    if (pid > 0) {
+        exit(EXIT_SUCCESS);
+    }
+    
+    if (setsid() < 0) {
+        exit(EXIT_FAILURE);
+    }
+
+    chdir("/");
+
+    umask(0);
+
+    fclose(stdin);
+    fclose(stdout);
+    fclose(stderr);
+}
+
 int main() {
+    daemonize();
+
     int server_fd, client_fd;
     struct sockaddr_in addr;
     socklen_t addrlen = sizeof(addr);
