@@ -1,4 +1,258 @@
-![image](https://github.com/user-attachments/assets/d0fe248f-d9c7-4baf-8569-a3f662373335)# Sisop-3-2025-IT29
+# Sisop-3-2025-IT29
+# Soal 1
+Oleh Oryza Qiara Ramadhani(084)
+
+Tahun 2045, dunia mengalami kekacauan siber. Sebagai mahasiswa Departemen Teknologi Informasi ITS, kita mencoba kembali ke tahun 2025 dan membuat sistem untuk menghubungi hacker legendaris bernama “rootkids”. Kita diberi file teks terenkripsi yang harus dikonversi ke file JPEG. Maka dari itu, kita membangun sistem client-server berbasis socket yang mampu:
+
+- Menerima perintah konversi file teks ke file JPEG.
+- Mengembalikan hasil JPEG tersebut ke client.
+- Menyimpan file hasil di direktori database server.
+
+a. Pada image_server.c, program yang dibuat harus berjalan secara daemon di background dan terhubung dengan image_client.c melalui socket RPC.
+
+```bash
+void daemonize() {
+    pid_t pid = fork();
+    if (pid < 0) {
+        exit(EXIT_FAILURE);
+    }
+    if (pid > 0) {
+        exit(EXIT_SUCCESS);
+    }
+    if (setsid() < 0) {
+        exit(EXIT_FAILURE);
+    }
+    chdir("/");
+    umask(0);
+    fclose(stdin);
+    fclose(stdout);
+    fclose(stderr);
+}
+```
+Agar program dapat berjalan di background maka menggunakan sistem daemon dan akan berhubunagn dengan client, lalu fungsi ini akan dipanggil di awal main() pada image_server.c agar server bisa terus aktif secara mandiri tanpa perlu dijalankan dari terminal setiap saat.
+
+b. Program image_client.c harus bisa terhubung dengan image_server.c dan bisa mengirimkan perintah untuk:
+Decrypt text file yang dimasukkan dengan cara Reverse Text lalu Decode from Hex, untuk disimpan dalam folder database server dengan nama file berupa timestamp dalam bentuk angka, misalnya: database/1744401282.jpeg
+Request download dari database server sesuai filename yang dimasukkan, misalnya: 1744401282.jpeg
+
+Sinyal perintah dari client untuk decrypt file
+
+```bash
+void decrypt_file() {
+    char filename[256];
+    printf("Masukkan nama file teks (contoh: input_1.txt): ");
+    scanf(" %[^\n]", filename);
+
+    write_log("Client", "DECRYPT", "Text data");
+
+    int sock = connect_to_server();
+    if (sock < 0) {
+        error_msg("Tidak dapat terhubung ke server");
+        return;
+    }
+
+    char request[BUFFER_SIZE];
+    snprintf(request, sizeof(request), "DECRYPT_FILE:%s", filename);
+    send(sock, request, strlen(request), 0);
+
+    char response[128];
+    int r = read(sock, response, sizeof(response) - 1);
+    if (r > 0) {
+        response[r] = '\0';
+        printf("Respon Server: %s\n", response);
+    } else {
+        error_msg("Tidak ada respon dari server");
+    }
+
+    close(sock);
+}
+```
+Yang dimana pada fungsi ini client dapat memberikan perintah untuk mengdekripsi file yang dimau "input_#.txt" lalu dalam file tersebut char akan dibalik dan akan di konversi yang awalnya berupa hex menjadi binary yang selanjutnya akan dijadikan sebagai penamaan file baru ke dalam database.
+
+sinyal perintah untuk mendownload file
+
+```bash
+void download_file() {
+    char filename[128];
+    printf("Masukkan nama file jpeg (contoh: 1744401234.jpeg): ");
+    scanf(" %[^\n]", filename);
+
+    write_log("Client", "DOWNLOAD", filename);
+
+    int sock = connect_to_server();
+    if (sock < 0) {
+        error_msg("Tidak dapat terhubung ke server");
+        return;
+    }
+
+    char request[BUFFER_SIZE];
+    snprintf(request, sizeof(request), "DOWNLOAD:%s", filename);
+    send(sock, request, strlen(request), 0);
+
+    char save_path[256];
+    snprintf(save_path, sizeof(save_path), "client/%s", filename);
+
+    FILE *fp = fopen(save_path, "wb");
+    if (!fp) {
+        error_msg("Gagal membuat file hasil");
+        close(sock);
+        return;
+    }
+
+    char buffer[BUFFER_SIZE];
+    int r;
+    int first_chunk = 1;
+    while ((r = read(sock, buffer, BUFFER_SIZE)) > 0) {
+        if (first_chunk && strncmp(buffer, "ERROR", 5) == 0) {
+            buffer[r] = '\0';
+            error_msg(buffer);
+            fclose(fp);
+            remove(save_path);
+            close(sock);
+            return;
+        }
+        fwrite(buffer, 1, r, fp);
+        first_chunk = 0;
+    }
+
+    printf("File berhasil disimpan: %s\n", save_path);
+    fclose(fp);
+    close(sock);
+}
+```
+File yang sudah di decrypt selanjutnya dapat di download dan akan tersimpan dalam folder client.
+
+c. Program image_client.c harus disajikan dalam bentuk menu kreatif yang memperbolehkan pengguna untuk memasukkan perintah berkali-kali.
+
+```bash
+int main() {
+    int pilih;
+    do {
+        printf("\n");
+        printf("==========================================\n");
+        printf("            RPC Client System           \n");
+        printf("==========================================\n");
+        printf(" 1. Masukkan File\n");
+        printf(" 2. Install File dalam Bentuk Foto\n");
+        printf(" 3. Exit\n");
+        printf("------------------------------------------\n");
+        printf(" Masukkan pilihan Anda [1-3]: ");
+        scanf("%d", &pilih);
+
+        switch (pilih) {
+            case 1: decrypt_file(); break;
+            case 2: download_file(); break;
+            case 3:
+                write_log("Client", "EXIT", "Client requested to exit");
+                printf(" Keluar dari Sistem ya\n");
+                break;
+            default: printf("Pilihan tidak valid.\n");
+        }
+    } while (pilih != 3);
+
+    return 0;
+}
+```
+```bash
+while (1) {
+        client_fd = accept(server_fd, (struct sockaddr*)&addr, &addrlen);
+        if (client_fd < 0) {
+            perror("Accept failed");
+            continue;
+        }
+        handle_client(client_fd);
+    }
+```
+Menu ini akan terus ditampilkan sampai pengguna memilih untuk keluar. Dengan menggunakan do-while, program memungkinkan pengguna untuk memilih perintah berulang kali.
+
+d. Program image_server.c diharuskan untuk tidak keluar/terminate saat terjadi error dan client akan menerima error message sebagai response, yang meliputi minimal:
+- Dari Client:
+Gagal connect ke server
+Salah nama text file input
+- Dari Server:
+Gagal menemukan file untuk dikirim ke client
+
+```bash
+//Dari sisi Server
+//apabila gagal menerima koneksi ke server
+if (client_fd < 0) { 
+    perror("Accept failed");
+    continue;
+}
+
+//apabila penamaan file yang diinput itu tidak ada
+if (!fp) {
+    write(client_fd, "ERROR_SAVE", 10); 
+    write_log("Server", "SAVE_FAIL", fullpath); 
+}
+
+//apabila file tidak ada pada saat mau di download
+if (!fp) {
+    write_log("Server", "NOT_FOUND", filename);
+    write(client_fd, "ERROR: File not found", 22);
+    close(client_fd);
+    return;
+}
+
+//Dari sisi client
+//apabila tidak terhubung ke server
+if (sock < 0) {
+    error_msg("Tidak dapat terhubung ke server");
+    return;
+}
+
+//apabila tidak ada respon dari server
+if (r <= 0) {
+    error_msg("Tidak ada respon dari server");
+}
+
+//apabila file tidak ada saat di download
+if (first_chunk && strncmp(buffer, "ERROR", 5) == 0) {
+    buffer[r] = '\0';
+    error_msg(buffer);
+    fclose(fp);
+    remove(save_path);  
+    close(sock);
+    return;
+}
+
+//Dan gagal menyimpan hasil
+if (!fp) {
+    error_msg("Gagal membuat file hasil");
+    close(sock);
+    return;
+}
+```
+e. Server menyimpan log semua percakapan antara image_server.c dan image_client.c di dalam file server.log dengan format:
+
+```bash
+void write_log(const char* source, const char* action, const char* info) {
+    FILE *log_fp = fopen(LOG_FILE, "a");
+    if (!log_fp) return;
+
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    char timestamp[64];
+    strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", t);
+    fprintf(log_fp, "[%s][%s]: [%s] [%s]\n", source, timestamp, action, info);
+    fclose(log_fp);
+}
+```
+yang dimana semua proses yang dijalankan ada tercatat didalam file log ini seperti berikut ini :
+
+![image](https://github.com/user-attachments/assets/a8ae534b-308c-4fce-a7aa-e18600c51b09)
+
+dan tak lupa bahwa formatnya 
+'[Source][YYYY-MM-DD hh:mm:ss]: [ACTION] [Info]'
+
+Apabila kedua file dijalankan menggunakan command 
+- `./server/image_server`
+- `./client/image_client`
+
+Maka akan berjalan seperti ini tampilannya :
+![image](https://github.com/user-attachments/assets/f00fdaf1-27c4-46fa-aa18-e630dcddc5c9)
+![image](https://github.com/user-attachments/assets/56cd1a2f-7bf1-46b5-90e5-9160c41371f2)
+
 
 ## SOAL 2
 
@@ -1525,3 +1779,4 @@ fungsi ini digunakan untuk melakukan duel antar hunter, dimana hunter yang kalah
 
 ![image](https://github.com/user-attachments/assets/be17bca1-823b-4f35-be16-4741584b9c7c)
 ![image](https://github.com/user-attachments/assets/ecb4de58-54e4-4f9f-94a0-2809a0bf6600)
+![image](https://github.com/user-attachments/assets/d0fe248f-d9c7-4baf-8569-a3f662373335)
