@@ -460,6 +460,28 @@ Jika menemukan pesanan yang sesuai:
 
 - Melepaskan shared memory
 
+## DOKUMENTASI SOAL 2
+
+- Download File CSV dengan wget
+
+![image](https://github.com/user-attachments/assets/dd4b3dda-e10e-4d64-8bbe-4118bd774f5f)
+
+- Order Reguler yang berhasil dikirim dengan -deliver Nama
+
+![image](https://github.com/user-attachments/assets/16cff7e5-0c12-4463-b059-14a3f65d9549)
+
+- Delivery List
+
+![image](https://github.com/user-attachments/assets/3c48c17e-98cc-45cf-a072-0bdd8306f1b5)
+
+- Pengecekan status pengiriman
+
+![image](https://github.com/user-attachments/assets/adb9f213-ff9b-4a45-aedc-b5ff60661118)
+
+
+
+
+
 
 ## SOAL 3
 
