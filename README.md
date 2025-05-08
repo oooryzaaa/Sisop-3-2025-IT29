@@ -1,4 +1,4 @@
-# Sisop-3-2025-IT29
+![image](https://github.com/user-attachments/assets/d0fe248f-d9c7-4baf-8569-a3f662373335)# Sisop-3-2025-IT29
 
 ## SOAL 2
 
@@ -536,4 +536,626 @@ Jika senjata yang dipakai memiliki Passive setiap kali passive tersebut menyala,
 
 Error Handling
 Berikan error handling untuk opsi-opsi yang tidak ada.
-Contoh:
+
+### a.) Entering the dungeon
+
+dungeon.c akan bekerja sebagai server yang dimana client (player.c) dapat terhubung melalui RPC. dungeon.c akan memproses segala perintah yang dikirim oleh player.c. Lebih dari 1 client dapat mengakses server.
+
+Kode penyelesaiian dungeon.c : 
+
+```bash
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <pthread.h>
+#include <time.h>
+#include <arpa/inet.h>
+
+#define PORT 9000
+#define MAX_CLIENTS 10
+#define BUFFER_SIZE 1024
+
+void log_activity(const char *ip, const char *message) {
+    FILE *f = fopen("dungeon.log", "a");
+    if (!f) return;
+
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+
+    fprintf(f, "[%04d-%02d-%02d %02d:%02d:%02d] [%s] %s\n",
+        t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+        t->tm_hour, t->tm_min, t->tm_sec, ip, message);
+
+    fclose(f);
+}
+
+void *handle_client(void *arg) {
+    int sock = *(int *)arg;
+    free(arg);
+
+    struct sockaddr_in client_addr;
+    socklen_t len = sizeof(client_addr);
+    getpeername(sock, (struct sockaddr *)&client_addr, &len);
+    char client_ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip));
+
+    // Log connection
+    char join_msg[128];
+    snprintf(join_msg, sizeof(join_msg), "Player has joined the server.");
+    log_activity(client_ip, join_msg);
+    printf("[INFO] %s\n", join_msg);
+
+    char buffer[BUFFER_SIZE];
+    ssize_t valread;
+
+    while (1) {
+        memset(buffer, 0, BUFFER_SIZE);
+        valread = read(sock, buffer, BUFFER_SIZE);
+        if (valread <= 0) break;
+
+        if (strncmp(buffer, "BATTLE", 6) == 0) {
+            srand(time(NULL) ^ pthread_self());
+            int enemy_hp = rand() % 151 + 50;
+            int reward = rand() % 101 + 50;
+
+            char msg[BUFFER_SIZE];
+            snprintf(msg, sizeof(msg), "ENEMY %d %d\n", enemy_hp, reward);
+            send(sock, msg, strlen(msg), 0);
+
+            char log_msg[128];
+            snprintf(log_msg, sizeof(log_msg), "Action: BATTLE -> ENEMY %d HP, %d GOLD", enemy_hp, reward);
+            log_activity(client_ip, log_msg);
+        } else {
+            const char *msg = "ERROR: Unknown request.\n";
+            send(sock, msg, strlen(msg), 0);
+        }
+    }
+
+    close(sock);
+    return NULL;
+}
+
+int main() {
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    socklen_t addrlen = sizeof(address);
+    pthread_t tid;
+
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("Bind failed");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    if (listen(server_fd, MAX_CLIENTS) < 0) {
+        perror("Listen failed");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("[SERVER] Dungeon started on port %d...\n", PORT);
+
+    while (1) {
+        new_socket = accept(server_fd, (struct sockaddr *)&address, &addrlen);
+        if (new_socket < 0) {
+            perror("Accept failed");
+            continue;
+        }
+
+        int *client_sock = malloc(sizeof(int));
+        *client_sock = new_socket;
+
+        if (pthread_create(&tid, NULL, handle_client, client_sock) != 0) {
+            perror("Thread creation failed");
+            close(new_socket);
+            free(client_sock);
+        } else {
+            pthread_detach(tid);
+        }
+    }
+
+    close(server_fd);
+    return 0;
+}
+    
+```
+- Dokumentasi main menu :
+![image](https://github.com/user-attachments/assets/2ff17bbf-9b93-49ab-bf2b-b9b0c3880fcf)
+
+- Multiple Player dapat memasuki Server :
+
+![image](https://github.com/user-attachments/assets/d06cc96f-f268-4aee-8bf7-cfb34731691e)
+
+![image](https://github.com/user-attachments/assets/ac8f5f79-a167-4c22-af85-f08e884d4142)
+
+![image](https://github.com/user-attachments/assets/d453fc73-feb9-485f-9a26-93886f7c2f0f)
+
+### Fungsi Log Activity
+
+```bash
+void log_activity(const char *ip, const char *message) {
+    FILE *f = fopen("dungeon.log", "a");
+    if (!f) return;
+
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+
+    fprintf(f, "[%04d-%02d-%02d %02d:%02d:%02d] [%s] %s\n",
+        t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+        t->tm_hour, t->tm_min, t->tm_sec, ip, message);
+
+    fclose(f);
+}
+```
+
+Code diatas adalah function yang digunakan untuk pembuatan logging activity, Dimana ini adalah fitur tambahan untuk log activity yang dapat dilihat dalam folder dan dapat dibuka.
+
+![image](https://github.com/user-attachments/assets/7f3b4f8c-c479-4475-8bd4-cfc1e642da21)
+
+```bash
+void *handle_client(void *arg) {
+    int sock = *(int *)arg;
+    free(arg);
+
+    struct sockaddr_in client_addr;
+    socklen_t len = sizeof(client_addr);
+    getpeername(sock, (struct sockaddr *)&client_addr, &len);
+    char client_ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip));
+
+    
+    char join_msg[128];
+    snprintf(join_msg, sizeof(join_msg), "Player has joined the server.");
+    log_activity(client_ip, join_msg);
+    printf("[INFO] %s\n", join_msg);
+
+    char buffer[BUFFER_SIZE];
+    ssize_t valread;
+
+    while (1) {
+        memset(buffer, 0, BUFFER_SIZE);
+        valread = read(sock, buffer, BUFFER_SIZE);
+        if (valread <= 0) break;
+
+        if (strncmp(buffer, "BATTLE", 6) == 0) {
+            srand(time(NULL) ^ pthread_self());
+            int enemy_hp = rand() % 151 + 50;
+            int reward = rand() % 101 + 50;
+
+            char msg[BUFFER_SIZE];
+            snprintf(msg, sizeof(msg), "ENEMY %d %d\n", enemy_hp, reward);
+            send(sock, msg, strlen(msg), 0);
+
+            char log_msg[128];
+            snprintf(log_msg, sizeof(log_msg), "Action: BATTLE -> ENEMY %d HP, %d GOLD", enemy_hp, reward);
+            log_activity(client_ip, log_msg);
+        } else {
+            const char *msg = "ERROR: Unknown request.\n";
+            send(sock, msg, strlen(msg), 0);
+        }
+    }
+
+    close(sock);
+    return NULL;
+}
+```
+
+Fungsi diatas merupakan fungsi untuk handle client server, menggunakan socket programming. Function ini juga digunakan untuk menghamdle fitur battle yang ada didalam program. Serta terdapat error handling apabila terdapat pemilihan opsi diluar pilihan yang tersedia.
+
+### Fungsi Main
+
+```bash
+int main() {
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    socklen_t addrlen = sizeof(address);
+    pthread_t tid;
+
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("Bind failed");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    if (listen(server_fd, MAX_CLIENTS) < 0) {
+        perror("Listen failed");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("[SERVER] Dungeon started on port %d...\n", PORT);
+
+    while (1) {
+        new_socket = accept(server_fd, (struct sockaddr *)&address, &addrlen);
+        if (new_socket < 0) {
+            perror("Accept failed");
+            continue;
+        }
+
+        int *client_sock = malloc(sizeof(int));
+        *client_sock = new_socket;
+
+        if (pthread_create(&tid, NULL, handle_client, client_sock) != 0) {
+            perror("Thread creation failed");
+            close(new_socket);
+            free(client_sock);
+        } else {
+            pthread_detach(tid);
+        }
+    }
+
+    close(server_fd);
+    return 0;
+}
+
+```
+Fungsi ini sendiri berfungsi sebagai socket server, alamat port server, bind socket ke port, koneksi masuk, dan loop multiclient untuk menerima player dalam jumlah lebih dari satu atau majemuk
+
+### b.) Sightseeing
+
+Soal ini merujuk kepada fitur main menu dalam program ini :
+
+![image](https://github.com/user-attachments/assets/b55d3d35-2282-41d2-93fc-1e0b6e735722)
+
+- Berikut ini merupakan kode yang digunakan untuk menyelesaikan fitur dalam interface player ke dalam server (Permainan). Konten didalam program ini berisi seperti player stats, inventory, Shop, battle, dan exit
+
+```bash
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <time.h>
+#include "shop.c"
+
+#define RED     "\033[1;31m"
+#define GREEN   "\033[1;42m"
+#define RESET   "\033[0m"
+
+#define PORT 9000
+#define BUFFER_SIZE 1024
+
+int sock;
+
+typedef struct {
+    int gold;
+    Weapon inventory[10];
+    int inv_count;
+    Weapon equipped;
+    int kill_count;
+} Player;
+
+Player player = {.gold = 300, .inv_count = 0, .kill_count = 0};
+
+void connect_to_server();
+void connect_and_battle();
+void show_stats();
+void show_inventory();
+void shop_menu();
+
+int main() {
+    connect_to_server();
+
+    int choice;
+    while (1) {
+        printf("\n== THE DUNGEON ==\n");
+        printf("1. Your Player Stats\n2. View Your Inventory\n3. THE Weapon Shop\n4. BATTLE Mode\n5. Exit\n>> ");
+        scanf("%d", &choice);
+        getchar();
+
+        switch (choice) {
+            case 1: show_stats(); break;
+            case 2: show_inventory(); break;
+            case 3: shop_menu(); break;
+            case 4: connect_and_battle(); break;
+            case 5: close(sock); exit(0);
+            default: printf("Invalid option.\n");
+        }
+    }
+}
+
+void connect_to_server() {
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in serv_addr;
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        perror("Connection failed");
+        exit(1);
+    }
+
+    printf("\033[1;32mPlayer has joined the server.\033[0m\n");
+}
+
+void show_stats() {
+    printf("\n== Player Stats ==\n");
+    printf("Gold: %d\n", player.gold);
+    printf("Weapon: %s\n", strlen(player.equipped.name) ? player.equipped.name : "None");
+    printf("Base Damage: %d\n", player.equipped.damage);
+    if (strlen(player.equipped.passive) && strcmp(player.equipped.passive, "-") != 0)
+        printf("Passive: %s\n", player.equipped.passive);
+    printf("Enemies Defeated: %d\n", player.kill_count);
+}
+
+void show_inventory() {
+    printf("\n== Inventory ==\n");
+    for (int i = 0; i < player.inv_count; i++) {
+        printf("%d. %s | Dmg: %d | Passive: %s\n", i+1, player.inventory[i].name, player.inventory[i].damage, player.inventory[i].passive);
+    }
+    printf("Equip weapon number? (-1 to cancel): ");
+    int x;
+    scanf("%d", &x);
+    if (x > 0 && x <= player.inv_count) {
+        player.equipped = player.inventory[x-1];
+        printf("Equipped %s!\n", player.equipped.name);
+    }
+}
+
+void shop_menu() {
+    show_shop();
+    printf("Select weapon to buy (-1 to cancel): ");
+    int sel;
+    scanf("%d", &sel);
+    sel--;
+    if (sel >= 0 && sel < 5) {
+        Weapon w = get_weapon(sel);
+        if (player.gold >= w.price) {
+            player.inventory[player.inv_count++] = w;
+            player.gold -= w.price;
+            printf("Bought %s!\n", w.name);
+        } else {
+            printf("Not enough gold!\n");
+        }
+    }
+}
+
+void print_healthbar(int hp, int max_hp) {
+    int bar_width = 25;
+    int filled = (hp * bar_width) / max_hp;
+
+    printf("Enemy health: [");
+    for (int i = 0; i < bar_width; i++) {
+        if (i < filled)
+            printf(GREEN " " RESET);
+        else
+            printf(" ");
+    }
+    printf("] %d/%d HP\n", hp, max_hp);
+}
+
+void connect_and_battle() {
+    srand(time(0));
+    char input[10];
+
+    while (1) {
+        send(sock, "BATTLE", strlen("BATTLE"), 0);
+        char buffer[BUFFER_SIZE] = {0};
+        read(sock, buffer, BUFFER_SIZE);
+
+        int enemy_hp, reward;
+        sscanf(buffer, "ENEMY %d %d", &enemy_hp, &reward);
+        int max_hp = enemy_hp;
+
+        printf("\nEnemy Appeared!\n");
+        print_healthbar(enemy_hp, max_hp);
+
+        while (enemy_hp > 0) {
+            printf("Type 'attack' to strike or 'exit' to flee: ");
+            scanf("%s", input);
+
+            if (strcmp(input, "attack") == 0) {
+                int dmg = player.equipped.damage + (rand() % 5);
+                int crit = rand() % 100 < 20 ? 1 : 0;
+                if (crit) dmg *= 2;
+                enemy_hp -= dmg;
+                if (enemy_hp < 0) enemy_hp = 0;
+
+                printf("You dealt " RED "%d damage" RESET " %s\n", dmg, crit ? "and defeated the enemy!" : "");
+                if (strlen(player.equipped.passive) > 1 && strcmp(player.equipped.passive, "-") != 0)
+                    printf("Passive activated: %s\n", player.equipped.passive);
+
+                if (enemy_hp <= 0) {
+                    printf("\n=== \033[1;35mREWARD\033[0m ===\n");
+                    printf("You earned \033[1;33m%d gold!\033[0m\n", reward);
+                    player.gold += reward;
+                    player.kill_count++;
+                    break;
+                } else {
+                    print_healthbar(enemy_hp, max_hp);
+                }
+            } else if (strcmp(input, "exit") == 0) {
+                printf("You fled the battle.\n");
+                return;
+            } else {
+                printf("Unknown command.\n");
+            }
+        }
+
+        printf("\n=== \033[1;36mNEW ENEMY\033[0m ===\n");
+    }
+}
+```
+### Status Check
+
+- Berikut merupakan fungsi yang digunakan untuk check player status, yang menggunakan function void yang diisi dengan printf dan memanggil dari struct data player 
+```bash
+void show_stats() {
+    printf("\n== Player Stats ==\n");
+    printf("Gold: %d\n",
+player.gold);
+    printf("Weapon: %s\n", strlen(player.equipped.name) ? player.equipped.name : "None");
+    printf("Base Damage: %d\n", player.equipped.damage);
+    if (strlen(player.equipped.passive) && strcmp(player.equipped.passive, "-") != 0)
+        printf("Passive: %s\n", player.equipped.passive);
+    printf("Enemies Defeated: %d\n", player.kill_count);
+}
+```
+Dokumentasi : 
+
+![image](https://github.com/user-attachments/assets/2c63b6c0-bed3-4ee5-bafe-034dee763dc8)
+
+### d.) Weapon Shop
+
+- Berikut ini adalah function void yang digunakan untuk menampilkan menu shop pada main menu player
+
+```bash
+void shop_menu() {
+    show_shop();
+    printf("Select weapon to buy (-1 to cancel): ");
+    int sel;
+    scanf("%d", &sel);
+    sel--;
+    if (sel >= 0 && sel < 5) {
+        Weapon w = get_weapon(sel);
+        if (player.gold >= w.price) {
+            player.inventory[player.inv_count++] = w;
+            player.gold -= w.price;
+            printf("Bought %s!\n", w.name);
+        } else {
+            printf("Not enough gold!\n");
+        }
+    }
+}
+```
+
+Dokumentasi : 
+
+![image](https://github.com/user-attachments/assets/2b2ceca2-87b9-4f17-a7ca-ea94d1c20172)
+
+### e.) Handy Inventory
+
+- Fungsi show inventory berikut yang menggunakan fungsi void diisi dengan "printf" untuk menampilkan inventory pemain : 
+
+```bash
+void show_inventory() {
+    printf("\n== Inventory ==\n");
+    for (int i = 0; i < player.inv_count; i++) {
+        printf("%d. %s | Dmg: %d | Passive: %s\n", i+1, player.inventory[i].name, player.inventory[i].damage, player.inventory[i].passive);
+    }
+    printf("Equip weapon number? (-1 to cancel): ");
+    int x;
+    scanf("%d", &x);
+    if (x > 0 && x <= player.inv_count) {
+        player.equipped = player.inventory[x-1];
+        printf("Equipped %s!\n", player.equipped.name);
+    }
+}
+```
+
+Dokumentasi : 
+
+![image](https://github.com/user-attachments/assets/6b577a4e-b3b2-4435-8a68-a2a991acf837)
+
+![image](https://github.com/user-attachments/assets/d6cd464b-0101-4d70-9663-0fb986d1b3e5)
+
+### f.) enemy encounter
+
+- Berikut adalah function connect_and_battle merupakan fungsi yang berhubung juga kedalam server. Jadi string battle akan terkirim untuk meminta musuh baru pada menu player, dan fungsi read() untuk menerima balasan dari server. Efek pasif serta mekanisme kabur juga tertulis didalam fungsi ini.
+
+```bash
+void connect_and_battle() {
+    srand(time(0));
+    char input[10];
+
+    while (1) {
+        send(sock, "BATTLE", strlen("BATTLE"), 0);
+        char buffer[BUFFER_SIZE] = {0};
+        read(sock, buffer, BUFFER_SIZE);
+
+        int enemy_hp, reward;
+        sscanf(buffer, "ENEMY %d %d", &enemy_hp, &reward);
+        int max_hp = enemy_hp;
+
+        printf("\nEnemy Appeared!\n");
+        print_healthbar(enemy_hp, max_hp);
+
+        while (enemy_hp > 0) {
+            printf("Type 'attack' to strike or 'exit' to flee: ");
+            scanf("%s", input);
+
+            if (strcmp(input, "attack") == 0) {
+                int dmg = player.equipped.damage + (rand() % 5);
+                int crit = rand() % 100 < 20 ? 1 : 0;
+                if (crit) dmg *= 2;
+                enemy_hp -= dmg;
+                if (enemy_hp < 0) enemy_hp = 0;
+
+                printf("You dealt " RED "%d damage" RESET " %s\n", dmg, crit ? "and defeated the enemy!" : "");
+                if (strlen(player.equipped.passive) > 1 && strcmp(player.equipped.passive, "-") != 0)
+                    printf("Passive activated: %s\n", player.equipped.passive);
+
+                if (enemy_hp <= 0) {
+                    printf("\n=== \033[1;35mREWARD\033[0m ===\n");
+                    printf("You earned \033[1;33m%d gold!\033[0m\n", reward);
+                    player.gold += reward;
+                    player.kill_count++;
+                    break;
+                } else {
+                    print_healthbar(enemy_hp, max_hp);
+                }
+            } else if (strcmp(input, "exit") == 0) {
+                printf("You fled the battle.\n");
+                return;
+            } else {
+                printf("Unknown command.\n");
+            }
+        }
+
+        printf("\n=== \033[1;36mNEW ENEMY\033[0m ===\n");
+    }
+}
+```
+Dokumentasi : 
+
+Serta dibawah ini mencakup poin g.) Other battle logic dimana pasif dari senjata akan berefek kepada musuh yang dihadapi. Healthbar musuh akan random dari 50-200 HP. Damage equation juga terdapat dalam kode diatas dan terdapat di dokumentasi hasil. 
+
+![image](https://github.com/user-attachments/assets/94d073a5-e301-46b7-a517-91dfa1bc7556)
+
+
+![image](https://github.com/user-attachments/assets/c3a61d94-12ba-4a76-bb0b-0bd36580be60)
+
+### h). Error handling
+
+Error handling akan selalu muncul ketika memilih diluar opsi dari yang diberikan 
+
+Dokumentasi : 
+
+![image](https://github.com/user-attachments/assets/51ae0b9c-11d4-4fa4-a6c7-1fa399b4dc52)
+
+![image](https://github.com/user-attachments/assets/3a768d70-b349-45e5-8dcb-f55bf8cfa882)
+
+![image](https://github.com/user-attachments/assets/8890128d-1672-4293-a0d4-8afdb5cfe1e2)
+
+![image](https://github.com/user-attachments/assets/77a7aba8-806d-43f3-98af-5859f9b06417)
+
+
+
+
+
+
+
+
+
