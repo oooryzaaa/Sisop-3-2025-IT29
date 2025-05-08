@@ -1153,9 +1153,374 @@ Dokumentasi :
 
 
 
+## SOAL 4
 
+Dikerjakan oleh: Bayu Kurniawan
 
+4.	Di dunia yang sedang kacau ini, muncul seorang hunter lemah bernama Sung Jin Woo😈yang bahkan tidak bisa mengangkat sebuah galon🛢️. Suatu hari, hunter ini tertabrak sebuah truk dan meninggal di tempat. Dia pun marah akan dirinya yang lemah dan berharap mendapat kesempatan kedua. Beruntungnya, Sung Jin Woo pun mengalami reinkarnasi dan sekarang bekerja sebagai seorang admin. Uniknya, pekerjaan ini mempunyai sebuah sistem yang bisa melakukan tracking pada seluruh aktivitas dan keadaan seseorang. Sayangnya, model yang diberikan oleh Bos-nya sudah sangat tua sehingga program tersebut harus dimodifikasi agar tidak ketinggalan zaman, dengan spesifikasi (Author: Rafa / kookoon)
 
+a.	Agar hunter lain tidak bingung, Sung Jin Woo memutuskan untuk membuat dua file, yaitu system.c dan hunter.c. Sung Jin Woo mendapat peringatan bahwa system.c merupakan shared memory utama yang mengelola shared memory hunter-hunter dari hunter.c. Untuk mempermudahkan pekerjaannya, Sung Jin Woo mendapat sebuah clue yang dapat membuat pekerjaannya menjadi lebih mudah dan efisien. NOTE : hunter bisa dijalankan ketika sistem sudah dijalankan.
 
+b.	Untuk memastikan keteraturan sistem, Sung Jin Woo memutuskan untuk membuat fitur registrasi dan login di program hunter. Setiap hunter akan memiliki key unik dan stats awal (Level=1, EXP=0, ATK=10, HP=100, DEF=5). Data hunter disimpan dalam shared memory tersendiri yang terhubung dengan sistem.
 
+```bash
+void register_hunter() {
+    if (sys_ptr->num_hunters >= MAX_HUNTERS) {
+        printf("Max hunters reached!\n");
+        return;
+    }
 
+    char username[50];
+    printf("Username: ");
+    scanf("%49s", username);
+
+    for (int i = 0; i < sys_ptr->num_hunters; i++) {
+        if (strcmp(sys_ptr->hunters[i].username, username) == 0) {
+            printf("Username sudah terdaftar!\n");
+            return;
+        }
+    }
+
+    key_t hk = ftok("/tmp", username[0]);
+    int shmid = shmget(hk, sizeof(struct Hunter), IPC_CREAT | 0666);
+    if (shmid < 0) {
+        perror("shmget(hunter)");
+        return;
+    }
+
+    struct Hunter *new_h;
+    new_h = shmat(shmid, NULL, 0);
+    if (new_h == (void*)-1) {
+        perror("shmat(hunter)");
+        return;
+    }
+
+    strcpy(new_h->username, username);
+    new_h->level = 1;
+    new_h->exp   = 0;
+    new_h->atk   = 10;
+    new_h->hp    = 100;
+    new_h->def   = 5;
+    new_h->banned = 0;
+    new_h->shm_key = hk;
+
+    sys_ptr->hunters[sys_ptr->num_hunters] = *new_h;
+    sys_ptr->num_hunters++;
+
+    shmdt(new_h);
+    printf("Registration success!\n");
+}
+
+void login_hunter() {
+    char username[50];
+    printf("Username: ");
+    scanf("%49s", username);
+
+    int idx = -1;
+    for (int i = 0; i < sys_ptr->num_hunters; i++) {
+        if (strcmp(sys_ptr->hunters[i].username, username) == 0) {
+            idx = i;
+            break;
+        }
+    }
+    if (idx < 0) {
+        printf("User tidak ditemukan.\n");
+        return;
+    }
+    if (sys_ptr->hunters[idx].banned) {
+        printf("User ini sedang dibanned.\n");
+        return;
+    }
+
+    key_t hk = sys_ptr->hunters[idx].shm_key;
+    int shmid = shmget(hk, sizeof(struct Hunter), 0666);
+    struct Hunter *self = shmat(shmid, NULL, 0);
+    if (self == (void*)-1) {
+        perror("shmat(self)");
+        return;
+    }
+    me = self;
+
+    printf("Login success! Welcome, %s.\n\n", me->username);
+    hunter_menu();
+}
+```
+
+pada fungsi register_hunter dilakukan pengecekan apakah jumlah hunter melebihi batas, jika tidak maka akan membuat hunter baru dengan stats default serta key unik untuk setiap hunternya. pada fungsi login_hunter dilakukan penelusuran array hunter untuk menemukan username yang sesuai dengan input, kemudian melakukan login ke akun hunter tersebut dengan menggunakan key unik milik hunter tersebut.
+
+![image](https://github.com/user-attachments/assets/2c8df226-1202-4b3b-8a73-550a816a0fe5)
+
+c. Agar dapat memantau perkembangan para hunter dengan mudah, Sung Jin Woo menambahkan fitur di sistem yang dapat menampilkan informasi semua hunter yang terdaftar, termasuk nama hunter, level, exp, atk, hp, def, dan status (banned atau tidak). Ini membuat dia dapat melihat siapa hunter terkuat dan siapa yang mungkin melakukan kecurangan.
+
+```bash
+void display_hunters() {
+    printf("=== HUNTER INFO ===\n");
+    for (int i = 0; i < sys_ptr->num_hunters; i++) {
+        struct Hunter h = sys_ptr->hunters[i];
+        printf("Name: %s\tLevel: %d\tEXP: %d\tATK: %d\tHP: %d\tDEF: %d\tStatus: %s\n",
+            h.username, h.level, h.exp, h.atk, h.hp, h.def, h.banned ? "BANNED" : "Active");
+    }
+}
+```
+fungsi tersebut digunakan untuk menampilkan seluruh data hunter yang ada. Hal tersebut dapat dilakukan dengan cara melakukan penelusuran pada array hunter kemudian melakukan print pada semua data data hunter.
+
+![image](https://github.com/user-attachments/assets/6462d690-273c-4e58-9ab0-703986ff9239)
+
+d.	Setelah beberapa hari bekerja, Sung Jin Woo menyadari bahwa para hunter membutuhkan tempat untuk berlatih dan memperoleh pengalaman. Ia memutuskan untuk membuat fitur unik dalam sistem yang dapat menghasilkan dungeon secara random dengan nama, level minimal hunter, dan stat rewards. Setiap dungeon akan disimpan dalam shared memory sendiri yang berbeda dan dapat diakses oleh hunter
+
+```bash
+void generate_dungeon() {
+    if (sys_ptr->num_dungeons >= MAX_DUNGEONS) {
+        printf("Dungeon limit reached!\n");
+        return;
+    }
+
+    struct Dungeon d;
+    sprintf(d.name, "Demon Castle");
+
+    d.min_level = (rand() % 5) + 1;
+    d.atk = (rand() % 51) + 100;
+    d.hp = (rand() % 51) + 50;
+    d.def = (rand() % 26) + 25;
+    d.exp = (rand() % 151) + 150;
+
+    // Generate shared memory key unik
+    d.shm_key = rand();
+
+    sys_ptr->dungeons[sys_ptr->num_dungeons++] = d;
+
+    printf("Dungeon generated!\n");
+    printf("Name: %s\n", d.name);
+    printf("Minimum Level: %d\n", d.min_level);
+}
+```
+fungsi diatas digunakan untuk membuat dungeons baru secara random. Pertama fungsi akan mengecek limit jumlah dungeons, kemudian akan menghasilkan nilai minimal lvl, atk, hp, def, serta exp yang didapatkan dari melakukan raid pada dungeon tersebut. (Note: nama nama dungeon pada file 'dungeon' tidak digunakan sehingga nama dungeon tidak dilakukan randomisasi dan akan selalu memiliki nama "Demon Castle"). Setelah itu juga membuat key random yang akan dilakukan pointer pada system.
+
+![image](https://github.com/user-attachments/assets/ddfb6e07-fdbd-4ccd-8bd4-eeaa2553b6bd)
+
+e.	Untuk memudahkan admin dalam memantau dungeon yang muncul, Sung Jin Woo menambahkan fitur yang menampilkan informasi detail semua dungeon. Fitur ini menampilkan daftar lengkap dungeon beserta nama, level minimum, reward (EXP, ATK, HP, DEF), dan key unik untuk masing-masing dungeon.
+
+```bash
+void display_dungeons() {
+    printf("=== DUNGEON INFO ===\n");
+    for (int i = 0; i < sys_ptr->num_dungeons; i++) {
+        struct Dungeon d = sys_ptr->dungeons[i];
+        printf("[Dungeon %d]\n", i + 1);
+        printf("Name: %s\n", d.name);
+        printf("Minimum Level: %d\n", d.min_level);
+        printf("EXP Reward: %d\n", d.exp);
+        printf("ATK: %d\n", d.atk);
+        printf("HP: %d\n", d.hp);
+        printf("DEF: %d\n", d.def);
+        printf("Key: %d\n", d.shm_key);
+        printf("-------------------------\n");
+    }
+}
+```
+
+Fungsi ini melakukan perulangan untuk menampilkan setiap index pada array dungeon beserta dengan data-data yang ada didalamnya seperti nama, minimum lvl, atk, hp, def, dan exp yang didapatkan, serta key uniknya
+
+![image](https://github.com/user-attachments/assets/f950dc8c-0259-441f-8a1e-96ae78e07fc3)
+
+f.	Pada saat yang sama, dungeon yang dibuat oleh sistem juga harus dapat diakses oleh hunter. Sung Jin Woo menambahkan fitur yang menampilkan semua dungeon yang tersedia sesuai dengan level hunter. Disini, hunter hanya dapat menampilkan dungeon dengan level minimum yang sesuai dengan level mereka
+
+```bash
+void list_dungeons(struct SystemData* system_data, struct Hunter* hunter) {
+    printf("\n=== AVAILABLE DUNGEONS ===\n");
+    for (int i = 0; i < system_data->num_dungeons; ++i) {
+        if (hunter->level >= system_data->dungeons[i].min_level) {
+            printf("%d. %s\t(Level %d+)\n", i + 1,
+                   system_data->dungeons[i].name,
+                   system_data->dungeons[i].min_level);
+        }
+    }
+    printf("\nPress enter to continue...");
+    getchar();
+    getchar();
+}
+```
+
+fungsi tersebut berguna untuk mengakses data sistem berupa dungeon mana saja yang dapat di raid. Hal tersebut dilakukan dengan mengakses data sistem kemudian dilakukan pengecekan terhadap lvl minimun dengan lvl hunter, jika kondisi terpenuhi maka dungeon akan ditampilkan, jika tidak maka tidak ditampilkan pada list.
+
+![image](https://github.com/user-attachments/assets/a0ff6299-6a1d-4129-86d5-bfea178bf33e)
+
+g.	Setelah melihat beberapa hunter yang terlalu kuat, Sung Jin Woo memutuskan untuk menambahkan fitur untuk menguasai dungeon. Ketika hunter berhasil menaklukan sebuah dungeon, dungeon tersebut akan menghilang dari sistem dan hunter akan mendapatkan stat rewards dari dungeon. Jika exp hunter mencapai 500, mereka akan naik level dan exp kembali ke 0.
+
+```bash
+void raid_dungeon(struct SystemData* system_data, struct Hunter* hunter) {
+    printf("\n=== RAIDABLE DUNGEONS ===\n");
+    int available_idx[MAX_DUNGEONS];
+    int count = 0;
+    for (int i = 0; i < system_data->num_dungeons; ++i) {
+        if (hunter->level >= system_data->dungeons[i].min_level) {
+            printf("%d. %s\t(Level %d+)\n", count + 1,
+                   system_data->dungeons[i].name,
+                   system_data->dungeons[i].min_level);
+            available_idx[count] = i;
+            count++;
+        }
+    }
+
+    if (count == 0) {
+        printf("No dungeon available for your level.\n");
+        return;
+    }
+
+    printf("Choose Dungeon: ");
+    int choice;
+    scanf("%d", &choice);
+
+    if (choice < 1 || choice > count) {
+        printf("Invalid choice.\n");
+        return;
+    }
+
+    int idx = available_idx[choice - 1];
+    struct Dungeon selected = system_data->dungeons[idx];
+
+    hunter->atk += selected.atk;
+    hunter->hp += selected.hp;
+    hunter->def += selected.def;
+    hunter->exp += selected.exp;
+
+    if (hunter->exp >= 500) {
+        hunter->level++;
+        hunter->exp = 0;
+    }
+
+    // Remove dungeon by shifting
+    for (int i = idx; i < system_data->num_dungeons - 1; ++i) {
+        system_data->dungeons[i] = system_data->dungeons[i + 1];
+    }
+    system_data->num_dungeons--;
+
+    for (int i = 0; i < system_data->num_hunters; ++i) {
+        if (strcmp(system_data->hunters[i].username, hunter->username) == 0) {
+            system_data->hunters[i] = *hunter;
+            break;
+        }
+    }
+
+    printf("\nRaid success! Gained:\n");
+    printf("ATK: %d\nHP: %d\nDEF: %d\nEXP: %d\n", selected.atk, selected.hp, selected.def, selected.exp);
+    printf("\nPress enter to continue...");
+    getchar();
+    getchar();
+}
+```
+
+fungsi ini digunakan untuk melakukan raid pada dungeon tertentu. pertama fungsi akan menampilkan list dungeons yang dapat di raid, kemudian fungsi akan meminta input dungeon mana yang akan di raid, setelah itu hunter akan mendapatkan reward hasil dari raid dungeon tersebut. setelah itu fungsi juga akan mengecek exp hunter, jika melebihi 500 maka level hunter akan bertambah 1. setelah itu akan dilakukan shifting pada array dungeon serta menghapus dungeon yang telah di raid.
+
+![image](https://github.com/user-attachments/assets/caf9e1e3-a43a-4dd4-bbe2-959f7f40d223)
+
+h.	Karena persaingan antar hunter semakin ketat, Sung Jin Woo mengimplementasikan fitur dimana hunter dapat memilih untuk bertarung dengan hunter lain. Tingkat kekuatan seorang hunter bisa dihitung melalui total stats yang dimiliki hunter tersebut (ATK+HP+DEF). Jika hunter menang, maka hunter tersebut akan mendapatkan semua stats milik lawan dan lawannya akan terhapus dari sistem. Jika kalah, hunter tersebutlah yang akan dihapus dari sistem dan semua statsnya akan diberikan kepada hunter yang dilawannya.
+
+```bash
+void pvp_duel(struct SystemData* system_data, struct Hunter* hunter) {
+    printf("\n=== CHOOSE AN OPPONENT ===\n");
+    int indices[MAX_HUNTERS];
+    int count = 0;
+
+    for (int i = 0; i < system_data->num_hunters; i++) {
+        struct Hunter h = system_data->hunters[i];
+        if (strcmp(h.username, hunter->username) != 0 && !h.banned) {
+            printf("%d. %s (LV %d, ATK %d, HP %d, DEF %d)\n", count + 1,
+                   h.username, h.level, h.atk, h.hp, h.def);
+            indices[count++] = i;
+        }
+    }
+
+    if (count == 0) {
+        printf("No opponents available.\n");
+        return;
+    }
+
+    printf("Choose opponent: ");
+    int choice;
+    scanf("%d", &choice);
+    if (choice < 1 || choice > count) {
+        printf("Invalid choice.\n");
+        return;
+    }
+
+    int opp_idx = indices[choice - 1];
+    struct Hunter* opponent = &system_data->hunters[opp_idx];
+
+    // Attach ke shared memory lawan
+    int shmid = shmget(opponent->shm_key, sizeof(struct Hunter), 0666);
+    if (shmid < 0) {
+        perror("shmget(opponent)");
+        return;
+    }
+
+    struct Hunter* opp_ptr = shmat(shmid, NULL, 0);
+    if (opp_ptr == (void*)-1) {
+        perror("shmat(opponent)");
+        return;
+    }
+
+    int my_power = hunter->atk + hunter->hp + hunter->def;
+    int opp_power = opp_ptr->atk + opp_ptr->hp + opp_ptr->def;
+
+    printf("\nYour power: %d | Opponent power: %d\n", my_power, opp_power);
+
+    if (my_power >= opp_power) {
+        printf("You WIN!\n");
+
+        hunter->atk += opp_ptr->atk;
+        hunter->hp  += opp_ptr->hp;
+        hunter->def += opp_ptr->def;
+
+        // Update ke system
+        for (int i = 0; i < system_data->num_hunters; ++i) {
+            if (strcmp(system_data->hunters[i].username, hunter->username) == 0) {
+                system_data->hunters[i] = *hunter;
+                break;
+            }
+        }
+
+        // Hapus opponent dari system
+        for (int i = opp_idx; i < system_data->num_hunters - 1; ++i) {
+            system_data->hunters[i] = system_data->hunters[i + 1];
+        }
+        system_data->num_hunters--;
+
+        // Remove shared memory opponent
+        shmdt(opp_ptr);
+        shmctl(shmid, IPC_RMID, NULL);
+        printf("Opponent defeated and removed from system.\n");
+        } else {
+        printf("You LOSE!\n");
+
+        opp_ptr->atk += hunter->atk;
+        opp_ptr->hp  += hunter->hp;
+        opp_ptr->def += hunter->def;
+
+        // Update ke system
+        system_data->hunters[opp_idx] = *opp_ptr;
+
+        // Hapus self dari system
+        for (int i = 0; i < system_data->num_hunters; ++i) {
+            if (strcmp(system_data->hunters[i].username, hunter->username) == 0) {
+                for (int j = i; j < system_data->num_hunters - 1; ++j) {
+                    system_data->hunters[j] = system_data->hunters[j + 1];
+                }
+                system_data->num_hunters--;
+                break;
+            }
+        }
+
+        // Remove shared memory self
+        shmdt(hunter);  // detach hunter
+        shmctl(shmget(hunter->shm_key, sizeof(struct Hunter), 0666), IPC_RMID, NULL);
+
+        printf("You were defeated and removed from the system.\n");
+        printf("Logging out...\n");
+        exit(0);  // terminate program karena user sudah dihapus
+    }
+}
+```
+
+fungsi ini digunakan untuk melakukan duel antar hunter, dimana hunter yang kalah akan dihapus dari system beserta dengan shared memorynya. Pertama akan ditampilkan list hunter lain untuk diajak duel, hunter akan memilih 1 lawan untuk melakukan duel. selanjutnya akan dibandingkan power kedua hunter yang dimana power dihasilkan dari penjumlahan antara ATK, HP, dan DEF. Hunter yang menang akan mendapatkan ATK, HP, dan DEF milik lawannya.
+
+![image](https://github.com/user-attachments/assets/be17bca1-823b-4f35-be16-4741584b9c7c)
