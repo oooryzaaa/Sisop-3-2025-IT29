@@ -33,3 +33,4 @@ Weapon get_weapon(int index) {
     }
     return weapons[index];
 }
+
